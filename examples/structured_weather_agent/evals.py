@@ -13,6 +13,9 @@ def run_and_get_tool_calls(agent, query):
         messages=[message],
         execute_tools=False,
     )
+    
+    assert response.usage.completion_tokens > 0
+    
     return response.messages[-1].get("tool_calls")
 
 

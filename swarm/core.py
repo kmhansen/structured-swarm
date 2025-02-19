@@ -8,6 +8,7 @@ from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 # Package/library imports
 from openai import AzureOpenAI, OpenAI
+from openai.types import CompletionUsage
 
 
 # Local imports
@@ -274,6 +275,10 @@ class Swarm:
         history = copy.deepcopy(messages)
         init_len = len(messages)
 
+        usage_history = CompletionUsage(
+            completion_tokens=0, prompt_tokens=0, total_tokens=0
+        )
+
         while len(history) - init_len < max_turns and active_agent:
 
             # get completion with current history, agent
@@ -292,6 +297,11 @@ class Swarm:
                 json.loads(message.model_dump_json())
             )  # to avoid OpenAI types (?)
 
+            usage: CompletionUsage = completion.usage
+            usage_history.completion_tokens += usage.completion_tokens
+            usage_history.prompt_tokens += usage.prompt_tokens
+            usage_history.total_tokens += usage.total_tokens
+
             if not message.tool_calls or not execute_tools:
                 debug_print(debug, "Ending turn.")
                 break
@@ -309,4 +319,5 @@ class Swarm:
             messages=history[init_len:],
             agent=active_agent,
             context_variables=context_variables,
+            usage = usage_history,
         )

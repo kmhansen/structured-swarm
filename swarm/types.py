@@ -1,3 +1,4 @@
+from openai.types import CompletionUsage
 from openai.types.chat import ChatCompletionMessage
 from openai.types.chat.chat_completion_message_tool_call import (
     ChatCompletionMessageToolCall,
@@ -24,6 +25,7 @@ class Response(BaseModel):
     messages: List = []
     agent: Optional[Agent] = None
     context_variables: dict = {}
+    usage: CompletionUsage = None
 
 
 class Result(BaseModel):
