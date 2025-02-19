@@ -3,7 +3,7 @@ import copy
 import json
 from collections import defaultdict
 import os
-from typing import List, Callable, Union
+from typing import List
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 # Package/library imports
@@ -11,7 +11,7 @@ from openai import AzureOpenAI, OpenAI
 
 
 # Local imports
-from .util import function_to_json, debug_print, merge_chunk
+from .util import function_to_json, debug_print, merge_chunk, convert_structured_types
 from .types import (
     Agent,
     AgentFunction,
@@ -134,13 +134,12 @@ class Swarm:
                 debug, f"Processing tool call: {name} with arguments {args}")
 
             func = function_map[name]
+            convert_structured_types(func, args)
+
             # pass context_variables to agent functions
             if __CTX_VARS_NAME__ in func.__code__.co_varnames:
                 args[__CTX_VARS_NAME__] = context_variables
-            try:
-                raw_result = function_map[name](**args)
-            except Exception as e:
-                import pdb; pdb.set_trace()
+            raw_result = func(**args)
 
             result: Result = self.handle_function_result(raw_result, debug)
             partial_response.messages.append(

@@ -10,7 +10,6 @@ class Location(BaseModel):
  
 def get_weather(location: Location, time: str="now"):
     """Get the current weather in a given location.."""
-    location = Location.model_validate(location)
     return json.dumps({"city": location.city, "country": location.country, "temperature": "65", "time": time})
 
 

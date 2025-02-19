@@ -1,7 +1,7 @@
 from datetime import datetime
 import inspect
 from typing import get_type_hints
-from pydantic import create_model
+from pydantic import BaseModel, create_model
 import openai
 
 
@@ -32,11 +32,21 @@ def merge_chunk(final_response: dict, delta: dict) -> None:
 
 
 def function_to_json(func) -> dict:
-    type_hints = get_type_hints(func)
-    if type_hints == {}:
-        return unstructured_function_to_json(func)
+    if get_type_hints(func) != {}:
+        return structured_function_to_json(func)
     else:
-        return structured_function_to_json(func, type_hints)
+        return unstructured_function_to_json(func)
+
+def convert_structured_types(func, args: dict) -> None:
+    if get_type_hints(func) == {}:
+        return
+    
+    type_hints = get_type_hints(func)
+    for arg_name, arg_value in args.items():
+        if arg_name in type_hints:
+            hint_type = type_hints[arg_name]
+            if isinstance(hint_type, type) and issubclass(hint_type, BaseModel):
+                args[arg_name] = hint_type.model_validate(arg_value)
 
 def unstructured_function_to_json(func) -> dict:
     """
@@ -96,7 +106,7 @@ def unstructured_function_to_json(func) -> dict:
         },
     }
     
-def structured_function_to_json(func, type_hints) -> dict:
+def structured_function_to_json(func) -> dict:
     """
     Converts a Python function into a JSON-serializable dictionary
     that describes the function's signature, including its name,
