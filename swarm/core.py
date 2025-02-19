@@ -2,14 +2,16 @@
 import copy
 import json
 from collections import defaultdict
-from typing import List, Callable, Union
+import os
+from typing import List
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 # Package/library imports
-from openai import OpenAI
+from openai import AzureOpenAI, OpenAI
 
 
 # Local imports
-from .util import function_to_json, debug_print, merge_chunk
+from .util import function_to_json, debug_print, merge_chunk, convert_structured_types
 from .types import (
     Agent,
     AgentFunction,
@@ -26,8 +28,22 @@ __CTX_VARS_NAME__ = "context_variables"
 class Swarm:
     def __init__(self, client=None):
         if not client:
-            client = OpenAI()
+            client = self._get_client()
         self.client = client
+
+    def _get_client(self):
+        if not os.getenv("AZURE_OPENAI_ENDPOINT"):
+            client = OpenAI()
+        else:
+            if not os.getenv("AZURE_OPENAI_API_KEY"):
+                client = AzureOpenAI(
+                    azure_ad_token_provider=get_bearer_token_provider(
+                        DefaultAzureCredential(),
+                        "https://cognitiveservices.azure.com/.default"))
+            else:
+                client = AzureOpenAI()
+        
+        return client
 
     def get_chat_completion(
         self,
@@ -63,10 +79,12 @@ class Swarm:
             "stream": stream,
         }
 
-        if tools:
+        if "tool_calls" in messages[-1]:
             create_params["parallel_tool_calls"] = agent.parallel_tool_calls
-
-        return self.client.chat.completions.create(**create_params)
+            del create_params["stream"]
+            return self.client.beta.chat.completions.parse(**create_params)
+        else:
+            return self.client.chat.completions.create(**create_params)
 
     def handle_function_result(self, result, debug) -> Result:
         match result:
@@ -116,10 +134,12 @@ class Swarm:
                 debug, f"Processing tool call: {name} with arguments {args}")
 
             func = function_map[name]
+            convert_structured_types(func, args)
+
             # pass context_variables to agent functions
             if __CTX_VARS_NAME__ in func.__code__.co_varnames:
                 args[__CTX_VARS_NAME__] = context_variables
-            raw_result = function_map[name](**args)
+            raw_result = func(**args)
 
             result: Result = self.handle_function_result(raw_result, debug)
             partial_response.messages.append(

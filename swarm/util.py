@@ -1,5 +1,8 @@
-import inspect
 from datetime import datetime
+import inspect
+from typing import get_type_hints
+from pydantic import BaseModel, create_model
+import openai
 
 
 def debug_print(debug: bool, *args: str) -> None:
@@ -29,6 +32,23 @@ def merge_chunk(final_response: dict, delta: dict) -> None:
 
 
 def function_to_json(func) -> dict:
+    if get_type_hints(func) != {}:
+        return structured_function_to_json(func)
+    else:
+        return unstructured_function_to_json(func)
+
+def convert_structured_types(func, args: dict) -> None:
+    if get_type_hints(func) == {}:
+        return
+    
+    type_hints = get_type_hints(func)
+    for arg_name, arg_value in args.items():
+        if arg_name in type_hints:
+            hint_type = type_hints[arg_name]
+            if isinstance(hint_type, type) and issubclass(hint_type, BaseModel):
+                args[arg_name] = hint_type.model_validate(arg_value)
+
+def unstructured_function_to_json(func) -> dict:
     """
     Converts a Python function into a JSON-serializable dictionary
     that describes the function's signature, including its name,
@@ -85,3 +105,33 @@ def function_to_json(func) -> dict:
             },
         },
     }
+    
+def structured_function_to_json(func) -> dict:
+    """
+    Converts a Python function into a JSON-serializable dictionary
+    that describes the function's signature, including its name,
+    description, and parameters.
+    
+    The function is described in a way such that its parameters 
+    correspond to Structured Outputs.
+
+    Args:
+        func: The function to be converted.
+
+    Returns:
+        A dictionary representing the function's signature in JSON format.
+    """
+
+    type_hints = get_type_hints(func)
+    fields = {param: (type_hints[param], None) for param in type_hints}
+    if "return" in fields:
+        del fields["return"]
+    func_model = create_model(
+        func.__name__,
+        **fields)
+
+    func_model.__doc__ = func.__doc__ or ""
+
+    result = openai.pydantic_function_tool(func_model)
+
+    return result
